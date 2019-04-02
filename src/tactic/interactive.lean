@@ -3,10 +3,7 @@ Copyright (c) 2017 Mario Carneiro. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Mario Carneiro, Simon Hudon, Sebastien Gouezel, Scott Morrison
 -/
-import data.dlist data.dlist.basic data.prod category.basic
-  tactic.basic tactic.rcases tactic.generalize_proofs
-  tactic.split_ifs logic.basic tactic.ext tactic.tauto
-  tactic.replacer tactic.simpa tactic.squeeze tactic.library_search
+import data.list.defs
 
 open lean
 open lean.parser
@@ -17,64 +14,6 @@ local postfix *:9001 := many
 namespace tactic
 namespace interactive
 open interactive interactive.types expr
-
-/--
-The `rcases` tactic is the same as `cases`, but with more flexibility in the
-`with` pattern syntax to allow for recursive case splitting. The pattern syntax
-uses the following recursive grammar:
-
-```
-patt ::= (patt_list "|")* patt_list
-patt_list ::= id | "_" | "⟨" (patt ",")* patt "⟩"
-```
-
-A pattern like `⟨a, b, c⟩ | ⟨d, e⟩` will do a split over the inductive datatype,
-naming the first three parameters of the first constructor as `a,b,c` and the
-first two of the second constructor `d,e`. If the list is not as long as the
-number of arguments to the constructor or the number of constructors, the
-remaining variables will be automatically named. If there are nested brackets
-such as `⟨⟨a⟩, b | c⟩ | d` then these will cause more case splits as necessary.
-If there are too many arguments, such as `⟨a, b, c⟩` for splitting on
-`∃ x, ∃ y, p x`, then it will be treated as `⟨a, ⟨b, c⟩⟩`, splitting the last
-parameter as necessary.
-
-`rcases` also has special support for quotient types: quotient induction into Prop works like
-matching on the constructor `quot.mk`.
-
-`rcases? e` will perform case splits on `e` in the same way as `rcases e`,
-but rather than accepting a pattern, it does a maximal cases and prints the
-pattern that would produce this case splitting. The default maximum depth is 5,
-but this can be modified with `rcases? e : n`.
--/
-meta def rcases : parse rcases_parse → tactic unit
-| (p, sum.inl ids) := tactic.rcases p ids
-| (p, sum.inr depth) := do
-  patt ← tactic.rcases_hint p depth,
-  pe ← pp p,
-  trace $ ↑"snippet: rcases " ++ pe ++ " with " ++ to_fmt patt
-
-/--
-The `rintro` tactic is a combination of the `intros` tactic with `rcases` to
-allow for destructuring patterns while introducing variables. See `rcases` for
-a description of supported patterns. For example, `rintros (a | ⟨b, c⟩) ⟨d, e⟩`
-will introduce two variables, and then do case splits on both of them producing
-two subgoals, one with variables `a d e` and the other with `b c d e`.
-
-`rintro?` will introduce and case split on variables in the same way as
-`rintro`, but will also print the `rintro` invocation that would have the same
-result. Like `rcases?`, `rintro? : n` allows for modifying the
-depth of splitting; the default is 5.
--/
-meta def rintro : parse rintro_parse → tactic unit
-| (sum.inl []) := intros []
-| (sum.inl l)  := tactic.rintro l
-| (sum.inr depth) := do
-  ps ← tactic.rintro_hint depth,
-  trace $ ↑"snippet: rintro" ++ format.join (ps.map $ λ p,
-    format.space ++ format.group (p.format tt))
-
-/-- Alias for `rintro`. -/
-meta def rintros := rintro
 
 /-- `try_for n { tac }` executes `tac` for `n` ticks, otherwise uses `sorry` to close the goal.
 Never fails. Useful for debugging. -/
@@ -126,10 +65,6 @@ do gs ← get_goals,
    | _        := skip
    end
 
-/-- Generalize proofs in the goal, naming them with the provided list. -/
-meta def generalize_proofs : parse ident_* → tactic unit :=
-tactic.generalize_proofs
-
 /-- Clear all hypotheses starting with `_`, like `_match` and `_let_match`. -/
 meta def clear_ : tactic unit := tactic.repeat $ do
   l ← local_context,
@@ -138,28 +73,6 @@ meta def clear_ : tactic unit := tactic.repeat $ do
     guard (s.front = '_'),
     cl ← infer_type h >>= is_class, guard (¬ cl),
     tactic.clear h
-
-meta def apply_iff_congr_core : tactic unit :=
-applyc ``iff_of_eq
-
-meta def congr_core' : tactic unit :=
-do tgt ← target,
-   apply_eq_congr_core tgt
-   <|> apply_heq_congr_core
-   <|> apply_iff_congr_core
-   <|> fail "congr tactic failed"
-
-/--
-Same as the `congr` tactic, but takes an optional argument which gives
-the depth of recursive applications. This is useful when `congr`
-is too aggressive in breaking down the goal. For example, given
-`⊢ f (g (x + y)) = f (g (y + x))`, `congr'` produces the goals `⊢ x = y`
-and `⊢ y = x`, while `congr' 2` produces the intended `⊢ x + y = y + x`. -/
-meta def congr' : parse (with_desc "n" small_nat)? → tactic unit
-| (some 0) := failed
-| o        := focus1 (assumption <|> (congr_core' >>
-  all_goals (reflexivity <|> `[apply proof_irrel_heq] <|>
-             `[apply proof_irrel] <|> try (congr' (nat.pred <$> o)))))
 
 /--
 Acts like `have`, but removes a hypothesis with the same name as
@@ -249,16 +162,6 @@ meta def solve_by_elim (all_goals : parse $ (tk "*")?) (no_dflt : parse only_fla
 do asms ← mk_assumption_set no_dflt hs attr_names,
    tactic.solve_by_elim { all_goals := all_goals.is_some, assumptions := return asms, ..opt }
 
-/--
-`tautology` breaks down assumptions of the form `_ ∧ _`, `_ ∨ _`, `_ ↔ _` and `∃ _, _`
-and splits a goal of the form `_ ∧ _`, `_ ↔ _` or `∃ _, _` until it can be discharged
-using `reflexivity` or `solve_by_elim`
--/
-meta def tautology (c : parse $ (tk "!")?) := tactic.tautology c.is_some
-
-/-- Shorter name for the tactic `tautology`. -/
-meta def tauto (c : parse $ (tk "!")?) := tautology c
-
 /-- Make every propositions in the context decidable -/
 meta def classical := tactic.classical
 
@@ -298,40 +201,6 @@ do h' ← get_unused_name `h,
            tactic.clear x'
      | none := return ()
    end
-
-/--
-Similar to `refine` but generates equality proof obligations
-for every discrepancy between the goal and the type of the rule.
--/
-meta def convert (sym : parse (with_desc "←" (tk "<-")?)) (r : parse texpr) (n : parse (tk "using" *> small_nat)?) : tactic unit :=
-do v ← mk_mvar,
-   if sym.is_some
-     then refine ``(eq.mp %%v %%r)
-     else refine ``(eq.mpr %%v %%r),
-   gs ← get_goals,
-   set_goals [v],
-   congr' n,
-   gs' ← get_goals,
-   set_goals $ gs' ++ gs
-
-meta def clean_ids : list name :=
-[``id, ``id_rhs, ``id_delta, ``hidden]
-
-/--
-Remove identity functions from a term. These are normally
-automatically generated with terms like `show t, from p` or
-`(p : t)` which translate to some variant on `@id t p` in
-order to retain the type. -/
-meta def clean (q : parse texpr) : tactic unit :=
-do tgt : expr ← target,
-   e ← i_to_expr_strict ``(%%q : %%tgt),
-   tactic.exact $ e.replace (λ e n,
-     match e with
-     | (app (app (const n _) _) e') :=
-       if n ∈ clean_ids then some e' else none
-     | (app (lam _ _ _ (var 0)) e') := some e'
-     | _ := none
-     end)
 
 meta def source_fields (missing : list name) (e : pexpr) : tactic (list (name × pexpr)) :=
 do e ← to_expr e,
@@ -519,90 +388,6 @@ by apply_rules mono_rules
 -/
 meta def apply_rules (hs : parse pexpr_list_or_texpr) (n : nat := 50) : tactic unit :=
 tactic.apply_rules hs n
-
-meta def return_cast (f : option expr) (t : option (expr × expr))
-  (es : list (expr × expr × expr))
-  (e x x' eq_h : expr) :
-  tactic (option (expr × expr) × list (expr × expr × expr)) :=
-(do guard (¬ e.has_var),
-    unify x x',
-    u ← mk_meta_univ,
-    f ← f <|> mk_mapp ``_root_.id [(expr.sort u : expr)],
-    t' ← infer_type e,
-    some (f',t) ← pure t | return (some (f,t'), (e,x',eq_h) :: es),
-    infer_type e >>= is_def_eq t,
-    unify f f',
-    return (some (f,t), (e,x',eq_h) :: es)) <|>
-return (t, es)
-
-meta def list_cast_of_aux (x : expr) (t : option (expr × expr))
-  (es : list (expr × expr × expr)) :
-  expr → tactic (option (expr × expr) × list (expr × expr × expr))
-| e@`(cast %%eq_h %%x') := return_cast none t es e x x' eq_h
-| e@`(eq.mp %%eq_h %%x') := return_cast none t es e x x' eq_h
-| e@`(eq.mpr %%eq_h %%x') := mk_eq_symm eq_h >>= return_cast none t es e x x'
-| e@`(@eq.subst %%α %%p %%a %%b  %%eq_h %%x') := return_cast p t es e x x' eq_h
-| e@`(@eq.substr %%α %%p %%a %%b %%eq_h %%x') := mk_eq_symm eq_h >>= return_cast p t es e x x'
-| e@`(@eq.rec %%α %%a %%f %%x' _  %%eq_h) := return_cast f t es e x x' eq_h
-| e@`(@eq.rec_on %%α %%a %%f %%b  %%eq_h %%x') := return_cast f t es e x x' eq_h
-| e := return (t,es)
-
-meta def list_cast_of (x tgt : expr) : tactic (list (expr × expr × expr)) :=
-(list.reverse ∘ prod.snd) <$> tgt.mfold (none, []) (λ e i es, list_cast_of_aux x es.1 es.2 e)
-
-private meta def h_generalize_arg_p_aux : pexpr → parser (pexpr × name)
-| (app (app (macro _ [const `heq _ ]) h) (local_const x _ _ _)) := pure (h, x)
-| _ := fail "parse error"
-
-private meta def h_generalize_arg_p : parser (pexpr × name) :=
-with_desc "expr == id" $ parser.pexpr 0 >>= h_generalize_arg_p_aux
-
-/--
-`h_generalize Hx : e == x` matches on `cast _ e` in the goal and replaces it with
-`x`. It also adds `Hx : e == x` as an assumption. If `cast _ e` appears multiple
-times (not necessarily with the same proof), they are all replaced by `x`. `cast`
-`eq.mp`, `eq.mpr`, `eq.subst`, `eq.substr`, `eq.rec` and `eq.rec_on` are all treated
-as casts.
-
-`h_generalize Hx : e == x with h` adds hypothesis `α = β` with `e : α, x : β`.
-
-`h_generalize Hx : e == x with _` chooses automatically chooses the name of
-assumption `α = β`.
-
-`h_generalize! Hx : e == x` reverts `Hx`.
-
-when `Hx` is omitted, assumption `Hx : e == x` is not added.
--/
-meta def h_generalize (rev : parse (tk "!")?)
-     (h : parse ident_?)
-     (_ : parse (tk ":"))
-     (arg : parse h_generalize_arg_p)
-     (eqs_h : parse ( (tk "with" >> pure <$> ident_) <|> pure [])) :
-  tactic unit :=
-do let (e,n) := arg,
-   let h' := if h = `_ then none else h,
-   h' ← (h' : tactic name) <|> get_unused_name ("h" ++ n.to_string : string),
-   e ← to_expr e,
-   tgt ← target,
-   ((e,x,eq_h)::es) ← list_cast_of e tgt | fail "no cast found",
-   interactive.generalize h' () (to_pexpr e, n),
-   asm ← get_local h',
-   v ← get_local n,
-   hs ← es.mmap (λ ⟨e,_⟩, mk_app `eq [e,v]),
-   (eqs_h.zip [e]).mmap' (λ ⟨h,e⟩, do
-        h ← if h ≠ `_ then pure h else get_unused_name `h,
-        () <$ note h none eq_h ),
-   hs.mmap' (λ h,
-     do h' ← assert `h h,
-        tactic.exact asm,
-        try (rewrite_target h'),
-        tactic.clear h' ),
-   when h.is_some (do
-     (to_expr ``(heq_of_eq_rec_left %%eq_h %%asm)
-       <|> to_expr ``(heq_of_eq_mp %%eq_h %%asm))
-     >>= note h' none >> pure ()),
-   tactic.clear asm,
-   when rev.is_some (interactive.revert [n])
 
 /-- `choose a b h using hyp` takes an hypothesis `hyp` of the form
 `∀ (x : X) (y : Y), ∃ (a : A) (b : B), P x y a b` for some `P : X → Y → A → B → Prop` and outputs

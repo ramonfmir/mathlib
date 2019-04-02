@@ -57,4 +57,19 @@ do intros_dep,
    t ← target,
    collect_proofs_in t [] (ns, hs) >> skip
 
+namespace interactive
+
+open lean
+open lean.parser
+open interactive interactive.types expr
+
+local postfix `?`:9001 := optional
+local postfix *:9001 := many
+
+/-- Generalize proofs in the goal, naming them with the provided list. -/
+meta def generalize_proofs : parse ident_* → tactic unit :=
+tactic.generalize_proofs
+
+end interactive
+
 end tactic

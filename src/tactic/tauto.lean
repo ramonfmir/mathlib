@@ -199,4 +199,20 @@ do when c classical,
        constructor_matching none [``(_ ∧ _),``(_ ↔ _),``(Exists _),``(true)] ) ;
       done
 
+namespace interactive
+
+setup_tactic_parser
+
+/--
+`tautology` breaks down assumptions of the form `_ ∧ _`, `_ ∨ _`, `_ ↔ _` and `∃ _, _`
+and splits a goal of the form `_ ∧ _`, `_ ↔ _` or `∃ _, _` until it can be discharged
+using `reflexivity` or `solve_by_elim`
+-/
+meta def tautology (c : parse $ (tk "!")?) := tactic.tautology c.is_some
+
+/-- Shorter name for the tactic `tautology`. -/
+meta def tauto (c : parse $ (tk "!")?) := tautology c
+
+end interactive
+
 end tactic
