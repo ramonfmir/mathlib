@@ -6,7 +6,7 @@ Authors: Mario Carneiro
 Additional theorems about the `vector` type.
 -/
 import data.vector data.list.basic data.sigma data.equiv.basic
-       category.traversable
+       category.traversable.basic
 
 universes u
 variables {n : ℕ}

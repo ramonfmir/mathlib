@@ -13,7 +13,7 @@ particular
 (*) define the 'operator norm' on L(E,F) and show that it induces the structure of a normed space
     on L(E,F).
 -/
-import algebra.module
+import algebra.module linear_algebra.basic
 import analysis.normed_space.bounded_linear_maps
 
 variables {k : Type*}

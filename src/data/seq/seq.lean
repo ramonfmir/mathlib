@@ -1,4 +1,4 @@
-import data.stream data.lazy_list data.seq.computation logic.basic tactic.interactive
+import data.stream data.lazy_list data.seq.computation logic.basic tactic.interactive data.pfun
 universes u v w
 
 /-

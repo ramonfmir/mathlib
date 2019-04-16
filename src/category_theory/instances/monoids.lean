@@ -8,7 +8,6 @@ Currently only the basic setup.
 -/
 
 import category_theory.concrete_category
-import category_theory.fully_faithful
 
 universes u v
 

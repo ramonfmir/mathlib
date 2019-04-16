@@ -7,10 +7,10 @@ Basic properties of lists.
 -/
 import
   tactic.interactive tactic.mk_iff_of_inductive_prop tactic.split_ifs
-  logic.basic logic.function logic.relation
+  logic.basic logic.function logic.relator
   algebra.group order.basic
   data.list.defs data.nat.basic data.option.basic
-  data.bool data.prod data.sigma data.fin
+  data.bool data.prod data.fin
 open function nat
 
 namespace list
@@ -2381,7 +2381,7 @@ end
 
 section forall₂
 variables {r : α → β → Prop} {p : γ → δ → Prop}
-open relator relation
+open relator
 
 run_cmd tactic.mk_iff_of_inductive_prop `list.forall₂ `list.forall₂_iff
 
