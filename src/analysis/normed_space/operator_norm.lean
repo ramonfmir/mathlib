@@ -61,6 +61,9 @@ def to_linear_map : linear_map _ E F :=
 
 instance : has_coe (E →L[k] F) (E→ₗ[k] F) := ⟨to_linear_map⟩
 
+def id : E →L[k] E :=
+{ val := _, property := is_bounded_linear_map.id }
+
 -- make some straightforward lemmas available to `simp`.
 @[simp] lemma map_zero : f (0 : E) = 0 := (to_linear_map _).map_zero
 @[simp] lemma map_add  : f (u + v) = f u + f v := (to_linear_map _).map_add _ _
@@ -70,17 +73,23 @@ instance : has_coe (E →L[k] F) (E→ₗ[k] F) := ⟨to_linear_map⟩
 
 lemma coe_zero : ((0 : E →L[k] F) : E → F) = 0 := rfl
 
-@[simp] lemma zero_apply : (0 : E →L[k] F) u = 0 := rfl
-@[simp] lemma smul_apply : (c • f) u = c • (f u) := rfl
-@[simp] lemma neg_apply  : (-f) u = - (f u) := rfl
+@[simp] lemma id_apply   : (id : E →L[k] E) u = u := rfl
+@[simp] lemma zero_apply : (0 : E →L[k] F) u = 0  := rfl
+@[simp] lemma add_apply  : (f + g) u = f u + g u  := rfl
+@[simp] lemma sub_apply  : (f - g) u = f u - g u  := rfl
+@[simp] lemma smul_apply : (c • f) u = c • (f u)  := rfl
+@[simp] lemma neg_apply  : (-f) u = - (f u)       := rfl
 
-@[simp] lemma zero_smul : (0 : k) • f = 0  := by { ext, simp }
-@[simp] lemma one_smul  : (1 : k) • f = f  := by { ext, simp }
+@[simp] lemma zero_smul : (0 : k) • f = 0 := by { ext, simp }
+@[simp] lemma one_smul  : (1 : k) • f = f := by { ext, simp }
 
 /-- Composition of bounded linear maps. -/
 def comp (g : F →L[k] G) (f : E →L[k] F) : E →L[k] G :=
 ⟨_, is_bounded_linear_map.comp g.property f.property⟩
 
+@[simp] lemma coe_comp (g : F →L[k] G) (f : E →L[k] F) :
+  ⇑(g.comp f) = g ∘ f :=
+rfl
 
 -- restate some analysis results about bounded linear maps
 -- in terms of the type here defined
